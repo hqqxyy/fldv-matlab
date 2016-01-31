@@ -1,4 +1,4 @@
-function mAP = fldv_fc_test(conf, imdb, roidb, varargin)
+function Error = fldv_fc_test(conf, imdb, roidb, varargin)
 % mAP = fldv_fc_test(conf, imdb, roidb, varargin)
 
 % --------------------------------------------------------
@@ -67,108 +67,66 @@ function mAP = fldv_fc_test(conf, imdb, roidb, varargin)
         count = 0;
         t_start = tic;
         rstshape = cell(num_videos, 1);
+        gtshape = cell(num_videos, 1);
         for i = 1:num_videos
             count = count + 1;
             fprintf('%s: test (%s) %d/%d ', procid(), imdb.name, count, num_videos);
             num_frames = length(imdb.videos{i}.images);
             for j = 1:num_frames
+                th = tic;
                 im = imread(imdb.videos{i}.images{j});
-                box = imdb.videos{i}.bboxes{j};
+                bbox = imdb.videos{i}.bboxes{j};
                 dummy_gtshape = zeros(68, 2);
-                [im_blob, gtshape_blob, initshape_blob, meanshape_blob] = get_blobs(conf, imdb_train, im, box, dummy_gtshape, model.meanshape)
+                [im_blob, gt_blob, init_blob, mean_blob] = get_blobs(im, bbox, dummy_gtshape, meanshape,...
+                                                                             'use_resize',          false, ...
+                                                                             'init_with_meanshape', false,...
+                                                                             'init_imdb',           opts.imdb_init,...
+                                                                             'image_means',         conf.image_means,...
+                                                                             'bbox_shift_range',    conf.test_bbox_shift_range,...
+                                                                             'batch_size',          conf.test_batch_size);
+                
+                im_blob = permute(im_blob, [2, 1, 3, 4]);
+                im_blob = single(im_blob);
+                
+                gt_blob = gt_blob - 1;% c's index start from 0
+                gt_blob = permute(gt_blob, [3, 2, 1]);
+                
+                init_blob = init_blob - 1;
+                init_blob = permute(init_blob, [3, 2, 1]);
+                
+                mean_blob = mean_blob - 1;
+                mean_blob = permute(mean_blob, [2, 1]);
+                
+                net_inputs = {im_blob, gt_blob, init_blob, mean_blob};
+                
+                caffe_net.reshape_as_input(net_inputs);
+                output_blobs = caffe_net.forward(net_inputs);
+                
+                rstshape{i, 1}{j, 1} = output_blobs{2};
+                gtshape{i, 1}{j, 1} = imdb.videos{i}.gtshapes{j};
+                fprintf(' time: %.3fs\n', toc(th)); 
             end
-            th = tic;
-            im = imread(imdb.image_at(i));
-
-            [boxes, scores] = fast_rcnn_im_detect(conf, caffe_net, im, d.boxes, max_rois_num_in_gpu);
-
-            for j = 1:num_classes
-                inds = find(~d.gt & scores(:, j) > thresh(j));
-                if ~isempty(inds)
-                    [~, ord] = sort(scores(inds, j), 'descend');
-                    ord = ord(1:min(length(ord), max_per_image));
-                    inds = inds(ord);
-                    cls_boxes = boxes(inds, (1+(j-1)*4):((j)*4));
-                    cls_scores = scores(inds, j);
-                    aboxes{j}{i} = [aboxes{j}{i}; cat(2, single(cls_boxes), single(cls_scores))];
-                    box_inds{j}{i} = [box_inds{j}{i}; inds];
-                else
-                    aboxes{j}{i} = [aboxes{j}{i}; zeros(0, 5, 'single')];
-                    box_inds{j}{i} = box_inds{j}{i};
-                end
-            end
-
-            fprintf(' time: %.3fs\n', toc(th));  
-
-            if mod(count, 1000) == 0
-                for j = 1:num_classes
-                [aboxes{j}, box_inds{j}, thresh(j)] = ...
-                    keep_top_k(aboxes{j}, box_inds{j}, i, max_per_set, thresh(j));
-                end
-                disp(thresh);
-            end    
         end
 
-        for j = 1:num_classes
-            [aboxes{j}, box_inds{j}, thresh(j)] = ...
-                keep_top_k(aboxes{j}, box_inds{j}, i, max_per_set, thresh(j));
-        end
-        disp(thresh);
-
-        for i = 1:num_classes
-
-            top_scores{i} = sort(top_scores{i}, 'descend');  
-            if (length(top_scores{i}) > max_per_set)
-                thresh(i) = top_scores{i}(max_per_set);
-            end
-
-            % go back through and prune out detections below the found threshold
-            for j = 1:length(imdb.image_ids)
-                if ~isempty(aboxes{i}{j})
-                    I = find(aboxes{i}{j}(:,end) < thresh(i));
-                    aboxes{i}{j}(I,:) = [];
-                    box_inds{i}{j}(I,:) = [];
-                end
-            end
-
-            save_file = fullfile(cache_dir, [imdb.classes{i} '_boxes_' imdb.name opts.suffix]);
-            boxes = aboxes{i};
-            inds = box_inds{i};
-            save(save_file, 'boxes', 'inds');
-            clear boxes inds;
-        end
         fprintf('test all images in %f seconds.\n', toc(t_start));
-        
         caffe.reset_all(); 
-        rng(prev_rng);
     end
 
     % ------------------------------------------------------------------------
-    % Peform AP evaluation
+    % Peform error evaluation
     % ------------------------------------------------------------------------
-
-    if isequal(imdb.eval_func, @imdb_eval_voc)
-        for model_ind = 1:num_classes
-          cls = imdb.classes{model_ind};
-          res(model_ind) = imdb.eval_func(cls, aboxes{model_ind}, imdb, opts.cache_name, opts.suffix);
+    rstError = cell(length{rstshape}, 1);
+    meanError = [];
+    for i = 1:length(rstshape)
+        rstError{i, 1} = cell(length(rstshape{i, 1}), 1);
+        for j = 1:length(rstshape{i, 1})
+            tmp_gtshape = repmat(gtshape{i, 1}{j, 1}, 1, 1, conf.test_batch_size);
+            rstError{i, 1}{j, 1} = compute_error(tmp_gtshape, rstshape{i, 1}{j, 1});
+            meanError(end+1, 1) = mean(rstError{i, 1}{j, 1});
         end
-    else
-    % ilsvrc
-        res = imdb.eval_func(aboxes, imdb, opts.cache_name, opts.suffix);
-    end
-
-    if ~isempty(res)
-        fprintf('\n~~~~~~~~~~~~~~~~~~~~\n');
-        fprintf('Results:\n');
-        aps = [res(:).ap]' * 100;
-        disp(aps);
-        disp(mean(aps));
-        fprintf('~~~~~~~~~~~~~~~~~~~~\n');
-        mAP = mean(aps);
-    else
-        mAP = nan;
     end
     
+    fprintf('mean error : %f \n', mean(meanError));
     diary off;
 end
 

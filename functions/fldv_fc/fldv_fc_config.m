@@ -21,7 +21,7 @@ function conf = fldv_fc_config(varargin)
     ip.addParamValue('use_meanshape',       false,                      @isscalar);    
     
     % mean image, in RGB order
-    ip.addParamValue('image_means',         [103.939, 116.779, 123.68],	@ismatrix);
+    ip.addParamValue('image_means',         [128.68, 116.779, 103.939],	@ismatrix); %VGG RGB
     % Use horizontally-flipped images during training?
     ip.addParamValue('use_flipped',         false,                      @islogical);
     % Stride in input image pixels at ROI pooling level (network specific)

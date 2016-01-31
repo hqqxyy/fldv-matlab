@@ -3,7 +3,15 @@ function [im, im_scale] = prep_im_for_blob(im, im_means, target_size, max_size)
     
     if ~isa(im, 'gpuArray')
         try
-            im = bsxfun(@minus, im, im_means);
+            if size(im_means, 1) == 3 && size(im_means, 2) == 1
+                tmp = zeros(size(im, 1), size(im, 2), 3, 'single');
+                tmp(:,:, 1) = im_means(1);
+                tmp(:,:, 2) = im_means(2);
+                tmp(:,:, 3) = im_means(3);
+                im = im - tmp;
+            else
+                im = bsxfun(@minus, im, im_means);
+            end
         catch
             im_means = imresize(im_means, [size(im, 1), size(im, 2)], 'bilinear', 'antialiasing', false);    
             im = bsxfun(@minus, im, im_means);
