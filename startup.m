@@ -13,7 +13,7 @@ function startup()
 
     mkdir_if_missing(fullfile(curdir, 'datasets'));
 
-    caffe_path = fullfile(curdir, '..', 'fldv-caffe', 'matlab', 'caffe');
+    caffe_path = fullfile(curdir, 'external', 'matlab', 'caffe');
     if exist(caffe_path, 'dir') == 0
         error('matcaffe is missing from external/caffe/matlab; See README.md');
     end

@@ -18,12 +18,12 @@ cache_base_proposal         = 'fldv_fc_vgg16_1_stage_conv2_2';
 
 % test data
 dataset                     = [];
-dataset                     = Dataset.lsp_test(dataset, 'test', false);
+dataset                     = Dataset.test_300w(dataset, 'test_common');
 
 %% Final test
 fprintf('\n***************\nfinal test\n***************\n');
      
-dataset.roidb_test       	= Fldv_Train.do_fldv_fc_test(conf_proposal, model.stage2_rpn, dataset.imdb_test, dataset.roidb_test);
+dataset.roidb_test       	= Fldv_Train.do_fldv_fc_test(conf_proposal, model.stage2_rpn, dataset.imdb_test);
 
 % save final models, for outside tester
 Faster_RCNN_Train.gather_rpn_fast_rcnn_models(conf_proposal, conf_fast_rcnn, model, dataset);

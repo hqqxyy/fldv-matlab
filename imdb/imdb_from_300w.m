@@ -23,9 +23,9 @@ catch
   imdb.name = ['300w_' image_set];
   switch image_set
       case {'train'}
-          video_list = loadTxtLines([root_dir, 'train/videoList.txt']);
+          video_list = loadTxtLines([root_dir, 'train/videolist.txt']);
       case {'test_common'}
-          video_list = loadTxtLines([root_dir, 'test_common/videoList.txt']);
+          video_list = loadTxtLines([root_dir, 'test_common/videolist.txt']);
       case {'test_challenging'}
           video_list = loadTxtLines([root_dir, 'test_challenging/videolist.txt']);
       otherwise
@@ -42,11 +42,11 @@ catch
   end
   
   videos = cell(length(video_list), 1);
-  image_at = @(video_name, frame_id) sprintf([root_dir, '%s/images/%.6d.jpg'], video_name, frame_id);
-  bbox_at = @(video_name, frame_id) sprintf([root_dir, '%s/boxes/%.6d.txt'], video_name, frame_id);
-  gtshape_at = @(video_name, frame_id) sprintf([root_dir, '%s/pts/%.6d.pts'], video_name, frame_id);
+  image_at = @(video_name, frame_id) sprintf([root_dir, image_set, '/', '%s/images/%.6d.jpg'], video_name, frame_id);
+  bbox_at = @(video_name, frame_id) sprintf([root_dir, image_set, '/', '%s/boxes/%.6d.txt'], video_name, frame_id);
+  gtshape_at = @(video_name, frame_id) sprintf([root_dir, image_set, '/', '%s/pts/%.6d.pts'], video_name, frame_id);
   for i = 1:length(video_list)
-      imlist = dir([root_dir, video_list{i}, '/*.jpg']);
+      imlist = dir([root_dir, image_set, '/', video_list{i}, '/images/*.jpg']);
       num_frames = length(imlist);
       images = cell(num_frames, 1);
       bboxes = cell(num_frames, 1);
@@ -63,15 +63,10 @@ catch
   imdb.videos = videos;
   imdb.num_videos = length(video_list);
 
-  % private VOC details
-  imdb.details.VOCopts = VOCopts;
-
   imdb.eval_func = @imdb_eval_300w;
   imdb.roidb_func = @roidb_from_300w;
-  imdb.image_at = @(i) ...
-      sprintf('%s/%s.%s', imdb.image_dir, imdb.image_ids{i}, imdb.extension);
-
-  for i = length(imdb.videos)
+  
+  for i = 1:length(imdb.videos)
       tic_toc_print('imdb (%s): %d/%d\n', imdb.name, i, length(imdb.videos));
       im = imread(imdb.videos{i}.images{1});
       imsize = size(im);
@@ -87,11 +82,11 @@ function lines = loadTxtLines(path)
 % function: load shape from pts file
 fid = fopen(path, 'r');
 lines = cell(0, 1);
-lines{end + 1, 1} = fgetl(fid);
-while ischar(tline)
-    disp(tline)
-    lines{end + 1, 1} = fgetl(fid);
+line = fgetl(fid);
+while ischar(line)
+    lines{end + 1, 1} = line;
+    line = fgetl(fid);
 end
-fclose(file);
+fclose(fid);
 
 
